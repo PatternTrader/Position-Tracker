@@ -453,11 +453,11 @@
       }
 
       return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-3 sm:p-4">
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-2 sm:p-3">
           <div className="max-w-6xl mx-auto" ref={screenshotRef}>
             {/* Header */}
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-3">
+            <div className="mb-2">
+              <div className="flex items-center justify-between mb-2">
                 <h1 className="text-lg sm:text-xl font-bold flex items-center gap-2">
                   <TrendingUpIcon className="w-5 h-5 text-emerald-400" />
                   Futures Tracker
@@ -472,7 +472,7 @@
               </div>
 
               {/* Account Info - Mobile Optimized */}
-              <div className="bg-slate-800 rounded-lg p-3 mb-3 border border-slate-700 space-y-2">
+              <div className="bg-slate-800 rounded-lg p-2 mb-2 border border-slate-700 space-y-1.5">
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-slate-400">Balance:</span>
                   <input
@@ -501,7 +501,7 @@
               </div>
               
               {/* Stats Grid - Mobile Optimized */}
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 bg-slate-800 rounded-lg p-3 border border-slate-700">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 bg-slate-800 rounded-lg p-2 border border-slate-700">
                 <div>
                   <div className="text-xs text-slate-400">Open Qty</div>
                   <div className="text-base sm:text-lg font-bold text-blue-400">{openQty}</div>
@@ -522,7 +522,7 @@
                     step="0.01"
                     value={currentPrice}
                     onChange={handleCurrentPriceChange}
-                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm mt-1"
+                    className="w-24 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm mt-1"
                     placeholder="Enter"
                   />
                 </div>
@@ -543,7 +543,7 @@
                     step="0.01"
                     value={targetPrice}
                     onChange={handleTargetPriceChange}
-                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm mt-1"
+                    className="w-24 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm mt-1"
                     placeholder="Enter"
                   />
                   <div className="text-xs mt-1">
@@ -558,10 +558,10 @@
             </div>
 
             {/* Main Content - Stacked on Mobile */}
-            <div className="space-y-4 sm:grid sm:grid-cols-2 sm:gap-4 sm:space-y-0">
+            <div className="space-y-3 sm:grid sm:grid-cols-2 sm:gap-3 sm:space-y-0">
               {/* Entry Section */}
               <div>
-                <div className="bg-slate-800 rounded-lg p-3 mb-3 border border-slate-700">
+                <div className="bg-slate-800 rounded-lg p-2 mb-2 border border-slate-700">
                   <h2 className="text-sm font-bold text-emerald-400 mb-2">Entry Trade</h2>
                   <div className="grid grid-cols-3 gap-2">
                     <input
@@ -589,13 +589,13 @@
                   </div>
                   <button
                     onClick={addEntry}
-                    className="w-full mt-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded transition text-sm"
+                    className="w-full mt-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 rounded transition text-sm"
                   >
                     Add Entry
                   </button>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <h3 className="text-sm font-semibold text-slate-400">Entry Trades</h3>
                   {entries.length === 0 ? (
                     <div className="text-center py-6 text-slate-500 bg-slate-800 rounded-lg border border-slate-700">
@@ -605,8 +605,8 @@
                     entries.map((entry) => {
                       const isEditing = editingEntryId === entry.id;
                       return (
-                        <div key={entry.id} className="bg-slate-800 rounded-lg p-3 border border-slate-700">
-                          <div className="flex justify-between items-center mb-2">
+                        <div key={entry.id} className="bg-slate-800 rounded-lg p-2 border border-slate-700">
+                          <div className="flex justify-between items-center mb-1.5">
                             <div className="flex items-center gap-2">
                               <div className="text-base font-bold text-white">{entry.symbol}</div>
                               <div className="text-xs text-slate-400">{entry.date}</div>
@@ -701,7 +701,7 @@
 
               {/* Exit Section */}
               <div>
-                <div className="bg-slate-800 rounded-lg p-3 mb-3 border border-slate-700">
+                <div className="bg-slate-800 rounded-lg p-2 mb-2 border border-slate-700">
                   <h2 className="text-sm font-bold text-red-400 mb-2">Theoretical Exit (Simulator)</h2>
                   <div className="grid grid-cols-3 gap-2">
                     <input
@@ -729,13 +729,13 @@
                   </div>
                   <button
                     onClick={addExit}
-                    className="w-full mt-2 bg-red-600 hover:bg-red-700 text-white font-semibold py-3 rounded transition text-sm"
+                    className="w-full mt-2 bg-red-600 hover:bg-red-700 text-white font-semibold py-2 rounded transition text-sm"
                   >
                     Add Theoretical Exit
                   </button>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <div className="flex justify-between items-center">
                     <h3 className="text-sm font-semibold text-slate-400">Theoretical Exits</h3>
                     <div className="text-xs sm:text-sm">
@@ -759,8 +759,8 @@
                       const diff = exit.exitPrice - comparePrice;
                       
                       return (
-                        <div key={exit.id} className="bg-slate-800 rounded-lg p-3 border border-slate-700">
-                          <div className="flex justify-between items-center mb-2">
+                        <div key={exit.id} className="bg-slate-800 rounded-lg p-2 border border-slate-700">
+                          <div className="flex justify-between items-center mb-1.5">
                             <div className="flex items-center gap-2">
                               <div className="text-base font-bold text-white">{exit.symbol}</div>
                               <div className="text-xs text-slate-400">{exit.date}</div>
