@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Futures Trading Tracker</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // Simple localStorage-based storage for GitHub Pages
+    const storage = {
+      async get(key) {
+        try {
+          const value = localStorage.getItem(key);
+          return value ? { key, value, shared: false } : null;
+        } catch (error) {
+          return null;
+        }
+      },
+      async set(key, value) {
+        try {
+          localStorage.setItem(key, value);
+          return { key, value, shared: false };
+        } catch (error) {
+          return null;
+        }
+      },
+      async delete(key) {
+        try {
+          localStorage.removeItem(key);
+          return { key, deleted: true, shared: false };
+        } catch (error) {
+          return null;
+        }
+      },
+      async list(prefix) {
+        try {
+          const keys = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (!prefix || key.startsWith(prefix)) {
+              keys.push(key);
+            }
+          }
+          return { keys, prefix, shared: false };
+        } catch (error) {
+          return { keys: [], prefix, shared: false };
+        }
+      }
+    };
+
+    function TrendingUpIcon({ className }) {
+      return (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+        </svg>
+      );
+    }
+
+    function XIcon({ className }) {
+      return (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      );
+    }
+
+    function CameraIcon({ className }) {
+      return (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      );
+    }
+
+    function FuturesTracker() {
+      const [entries, setEntries] = useState([]);
+      const [exits, setExits] = useState([]);
+      const [symbol, setSymbol] = useState('');
+      const [contracts, setContracts] = useState('');
+      const [entryPrice, setEntryPrice] = useState('');
+      const [exitContracts, setExitContracts] = useState('');
+      const [exitPrice, setExitPrice] = useState('');
+      const [targetPrice, setTargetPrice] = useState('');
+      const [currentPrice, setCurrentPrice] = useState('');
+      const [accountBalance, setAccountBalance] = useState('');
+      const [multipliers, setMultipliers] = useState({});
+      const [editingEntryId, setEditingEntryId] = useState(null);
+      const [editingExitId, setEditingExitId] = useState(null);
+      const [editValues, setEditValues] = useState({});
+      const screenshotRef = useRef(null);
+
+      useEffect(() => {
+        loadAllData();
+      }, []);
+
+      async function loadAllData() {
+        await loadData();
+        await loadPrices();
+      }
+
+      async function loadPrices() {
+        try {
+          const currentResult = await storage.get('currentPrice');
+          if (currentResult) {
+            setCurrentPrice(currentResult.value);
+          }
+          const targetResult = await storage.get('targetPrice');
+          if (targetResult) {
+            setTargetPrice(targetResult.value);
+          }
+          const balanceResult = await storage.get('accountBalance');
+          if (balanceResult) {
+            setAccountBalance(balanceResult.value);
+          }
+        } catch (error) {
+          console.log('No saved prices');
+        }
+      }
+
+      async function loadData() {
+        try {
+          const entryResult = await storage.list('entry:');
+          if (entryResult && entryResult.keys) {
+            const entryData = await Promise.all(
+              entryResult.keys.map(async (key) => {
+                const data = await storage.get(key);
+                return data ? JSON.parse(data.value) : null;
+              })
+            );
+            setEntries(entryData.filter(t => t !== null).sort((a, b) => 
+              new Date(b.timestamp) - new Date(a.timestamp)
+            ));
+          }
+
+          const exitResult = await storage.list('exit:');
+          if (exitResult && exitResult.keys) {
+            const exitData = await Promise.all(
+              exitResult.keys.map(async (key) => {
+                const data = await storage.get(key);
+                return data ? JSON.parse(data.value) : null;
+              })
+            );
+            setExits(exitData.filter(t => t !== null).sort((a, b) => 
+              b.exitPrice - a.exitPrice
+            ));
+          }
+
+          const multResult = await storage.get('multipliers');
+          if (multResult) {
+            setMultipliers(JSON.parse(multResult.value));
+          }
+        } catch (error) {
+          console.log('Loading data');
+        }
+      }
+
+      async function saveMultiplier(sym, multiplier) {
+        const updated = Object.assign({}, multipliers);
+        updated[sym] = multiplier;
+        setMultipliers(updated);
+        try {
+          await storage.set('multipliers', JSON.stringify(updated));
+        } catch (error) {
+          console.log('Error saving multiplier');
+        }
+      }
+
+      async function saveCurrentPrice(price) {
+        try {
+          await storage.set('currentPrice', price);
+        } catch (error) {
+          console.log('Error saving current price');
+        }
+      }
+
+      async function saveTargetPrice(price) {
+        try {
+          await storage.set('targetPrice', price);
+        } catch (error) {
+          console.log('Error saving target price');
+        }
+      }
+
+      async function saveAccountBalance(balance) {
+        try {
+          await storage.set('accountBalance', balance);
+        } catch (error) {
+          console.log('Error saving account balance');
+        }
+      }
+
+      function handleCurrentPriceChange(e) {
+        const val = e.target.value;
+        setCurrentPrice(val);
+        saveCurrentPrice(val);
+      }
+
+      function handleTargetPriceChange(e) {
+        const val = e.target.value;
+        setTargetPrice(val);
+        saveTargetPrice(val);
+      }
+
+      function handleAccountBalanceChange(e) {
+        const val = e.target.value;
+        setAccountBalance(val);
+        saveAccountBalance(val);
+      }
+
+      async function addEntry() {
+        if (!symbol || !contracts || !entryPrice) {
+          alert('Please fill in Symbol, Contracts, and Entry Price');
+          return;
+        }
+
+        const symUpper = symbol.toUpperCase();
+        
+        if (!multipliers[symUpper]) {
+          const commonMultipliers = {
+            'GC': 100,
+            'SI': 5000,
+            'ES': 50,
+            'NQ': 20,
+            'CL': 1000,
+            'ZB': 1000,
+            'ZN': 1000
+          };
+          if (commonMultipliers[symUpper]) {
+            await saveMultiplier(symUpper, commonMultipliers[symUpper]);
+          }
+        }
+
+        const entry = {
+          id: Date.now().toString(),
+          symbol: symUpper,
+          contracts: parseInt(contracts),
+          entryPrice: parseFloat(entryPrice),
+          timestamp: new Date().toISOString(),
+          date: new Date().toLocaleDateString()
+        };
+
+        try {
+          await storage.set('entry:' + entry.id, JSON.stringify(entry));
+          await loadData();
+          
+          setContracts('');
+          setEntryPrice('');
+        } catch (error) {
+          alert('Error saving entry');
+        }
+      }
+
+      async function addExit() {
+        if (!symbol || !exitContracts || !exitPrice) {
+          alert('Please fill in Symbol, Exit Qty, and Exit Price');
+          return;
+        }
+
+        const exit = {
+          id: Date.now().toString(),
+          symbol: symbol.toUpperCase(),
+          contracts: parseInt(exitContracts),
+          exitPrice: parseFloat(exitPrice),
+          timestamp: new Date().toISOString(),
+          date: new Date().toLocaleDateString()
+        };
+
+        try {
+          await storage.set('exit:' + exit.id, JSON.stringify(exit));
+          await loadData();
+          
+          setExitContracts('');
+          setExitPrice('');
+        } catch (error) {
+          alert('Error saving exit');
+        }
+      }
+
+      async function deleteEntry(id) {
+        try {
+          await storage.delete('entry:' + id);
+          await loadData();
+        } catch (error) {
+          alert('Error deleting entry');
+        }
+      }
+
+      async function deleteExit(id) {
+        try {
+          await storage.delete('exit:' + id);
+          await loadData();
+        } catch (error) {
+          alert('Error deleting exit');
+        }
+      }
+
+      async function updateEntry(entry) {
+        try {
+          await storage.set('entry:' + entry.id, JSON.stringify(entry));
+          await loadData();
+          setEditingEntryId(null);
+          setEditValues({});
+        } catch (error) {
+          alert('Error updating entry');
+        }
+      }
+
+      async function updateExit(exit) {
+        try {
+          await storage.set('exit:' + exit.id, JSON.stringify(exit));
+          await loadData();
+          setEditingExitId(null);
+          setEditValues({});
+        } catch (error) {
+          alert('Error updating exit');
+        }
+      }
+
+      function startEditingEntry(entry) {
+        setEditingEntryId(entry.id);
+        setEditValues({
+          contracts: entry.contracts,
+          entryPrice: entry.entryPrice
+        });
+      }
+
+      function startEditingExit(exit) {
+        setEditingExitId(exit.id);
+        setEditValues({
+          contracts: exit.contracts,
+          exitPrice: exit.exitPrice
+        });
+      }
+
+      function saveEntryEdit(entry) {
+        const updated = Object.assign({}, entry);
+        updated.contracts = parseInt(editValues.contracts) || entry.contracts;
+        updated.entryPrice = parseFloat(editValues.entryPrice) || entry.entryPrice;
+        updateEntry(updated);
+      }
+
+      function saveExitEdit(exit) {
+        const updated = Object.assign({}, exit);
+        updated.contracts = parseInt(editValues.contracts) || exit.contracts;
+        updated.exitPrice = parseFloat(editValues.exitPrice) || exit.exitPrice;
+        updateExit(updated);
+      }
+
+      function formatMoney(val) {
+        return val.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+      }
+
+      function formatMoneyWhole(val) {
+        return val.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0});
+      }
+
+      function calculatePositions() {
+        const positions = {};
+        
+        entries.forEach(entry => {
+          if (!positions[entry.symbol]) {
+            positions[entry.symbol] = { totalQty: 0, totalCost: 0 };
+          }
+          positions[entry.symbol].totalQty += entry.contracts;
+          positions[entry.symbol].totalCost += entry.contracts * entry.entryPrice;
+        });
+
+        return positions;
+      }
+
+      const positions = calculatePositions();
+      
+      const openSymbol = Object.keys(positions)[0] || '';
+      const openQty = openSymbol ? positions[openSymbol].totalQty : 0;
+      const avgEntry = openSymbol && openQty > 0 ? positions[openSymbol].totalCost / positions[openSymbol].totalQty : 0;
+      
+      const currentMultiplier = parseFloat(multipliers[openSymbol]) || 1;
+      
+      const totalExitPnL = exits.reduce((sum, exit) => {
+        const pos = positions[exit.symbol];
+        const mult = multipliers[exit.symbol] || 1;
+        const comparePrice = currentPrice ? parseFloat(currentPrice) : (pos ? pos.totalCost / pos.totalQty : 0);
+        const pnl = (exit.exitPrice - comparePrice) * exit.contracts * mult;
+        return sum + pnl;
+      }, 0);
+
+      const targetProfit = targetPrice && openQty > 0
+        ? (parseFloat(targetPrice) - avgEntry) * openQty * currentMultiplier
+        : null;
+
+      const currentProfit = currentPrice && openQty > 0
+        ? (parseFloat(currentPrice) - avgEntry) * openQty * currentMultiplier
+        : null;
+
+      let newAccountBalance = null;
+      if (accountBalance) {
+        newAccountBalance = parseFloat(accountBalance) + totalExitPnL;
+      }
+
+      function renderPnL(pnl) {
+        const sign = pnl >= 0 ? '+' : '-';
+        const color = pnl >= 0 ? 'text-emerald-400' : 'text-red-400';
+        return (
+          <div className={'font-semibold ' + color}>
+            {sign}${formatMoneyWhole(Math.abs(pnl))}
+          </div>
+        );
+      }
+
+      async function takeScreenshot() {
+        if (!screenshotRef.current) return;
+        
+        try {
+          const html2canvas = (await import('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/+esm')).default;
+          const canvas = await html2canvas(screenshotRef.current);
+          const link = document.createElement('a');
+          const timestamp = new Date().toLocaleString().replace(/[/:]/g, '-').replace(/,/g, '');
+          link.download = 'futures-tracker-' + timestamp + '.png';
+          link.href = canvas.toDataURL();
+          link.click();
+        } catch (error) {
+          alert('Error taking screenshot');
+        }
+      }
+
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-4">
+          <div className="max-w-6xl mx-auto" ref={screenshotRef}>
+            <div className="mb-3">
+              <div className="flex items-center justify-between mb-2">
+                <h1 className="text-xl font-bold flex items-center gap-2">
+                  <TrendingUpIcon className="w-5 h-5 text-emerald-400" />
+                  Futures Tracker
+                </h1>
+                <div className="flex items-start gap-4">
+                  <button
+                    onClick={takeScreenshot}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded transition text-sm flex items-center gap-2"
+                  >
+                    <CameraIcon className="w-4 h-4" />
+                    Save
+                  </button>
+                  <div className="text-sm">
+                    <div className="mb-1">
+                      <span className="text-slate-400">Account Balance: </span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={accountBalance}
+                        onChange={handleAccountBalanceChange}
+                        className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm w-32"
+                        placeholder="Enter"
+                      />
+                    </div>
+                    <div className="mb-1">
+                      <span className="text-slate-400">Theoretical Exit P&L: </span>
+                      <span className={totalExitPnL >= 0 ? 'font-bold text-emerald-400' : 'font-bold text-red-400'}>
+                        {totalExitPnL >= 0 ? '+' : '-'}${formatMoneyWhole(Math.abs(totalExitPnL))}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400">New Balance: </span>
+                      {newAccountBalance ? (
+                        <span className="font-bold text-white">${formatMoney(newAccountBalance)}</span>
+                      ) : (
+                        <span className="font-bold text-slate-500">-</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-5 gap-2 bg-slate-800 rounded-lg p-3 border border-slate-700">
+                <div>
+                  <div className="text-xs text-slate-400">Open Qty</div>
+                  <div className="text-lg font-bold text-blue-400">{openQty}</div>
+                  <div className="text-xs text-slate-500 mt-1">
+                    {openSymbol && openSymbol + ' x' + currentMultiplier}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-slate-400">Avg Entry</div>
+                  <div className="text-lg font-bold text-white">
+                    {openQty > 0 ? '$' + formatMoney(avgEntry) : '-'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-slate-400">Current Price</div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={currentPrice}
+                    onChange={handleCurrentPriceChange}
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm"
+                    placeholder="Enter"
+                  />
+                </div>
+                <div>
+                  <div className="text-xs text-slate-400">Current Profit</div>
+                  <div className="text-lg font-bold text-white">
+                    {currentProfit !== null ? (
+                      <span className={currentProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                        {currentProfit >= 0 ? '+$' : '-$'}{formatMoneyWhole(Math.abs(currentProfit))}
+                      </span>
+                    ) : '-'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-slate-400">Target Price</div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={targetPrice}
+                    onChange={handleTargetPriceChange}
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm"
+                    placeholder="Enter"
+                  />
+                  <div className="text-xs mt-1">
+                    {targetProfit !== null ? (
+                      <span className={targetProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                        {targetProfit >= 0 ? '+$' : '-$'}{formatMoneyWhole(Math.abs(targetProfit))}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <div className="bg-slate-800 rounded-lg p-3 mb-3 border border-slate-700">
+                  <h2 className="text-sm font-bold text-emerald-400 mb-2">Entry Trade</h2>
+                  <div className="grid grid-cols-3 gap-2">
+                    <input
+                      type="text"
+                      value={symbol}
+                      onChange={(e) => setSymbol(e.target.value)}
+                      className="bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
+                      placeholder="Symbol"
+                    />
+                    <input
+                      type="number"
+                      value={contracts}
+                      onChange={(e) => setContracts(e.target.value)}
+                      className="bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
+                      placeholder="Qty"
+                    />
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={entryPrice}
+                      onChange={(e) => setEntryPrice(e.target.value)}
+                      className="bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
+                      placeholder="Price"
+                    />
+                  </div>
+                  <button
+                    onClick={addEntry}
+                    className="w-full mt-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 rounded transition text-sm"
+                  >
+                    Add Entry
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-slate-400">Entry Trades</h3>
+                  {entries.length === 0 ? (
+                    <div className="text-center py-6 text-slate-500 bg-slate-800 rounded-lg border border-slate-700">
+                      <p className="text-xs">No entries yet</p>
+                    </div>
+                  ) : (
+                    entries.map((entry) => {
+                      const isEditing = editingEntryId === entry.id;
+                      return (
+                        <div key={entry.id} className="bg-slate-800 rounded-lg p-3 border border-slate-700">
+                          <div className="flex justify-between items-center mb-2">
+                            <div className="flex items-center gap-2">
+                              <div className="text-base font-bold text-white">{entry.symbol}</div>
+                              <div className="text-xs text-slate-400">{entry.date}</div>
+                            </div>
+                            <div className="flex gap-2">
+                              {isEditing ? (
+                                <React.Fragment>
+                                  <button
+                                    onClick={() => saveEntryEdit(entry)}
+                                    className="text-emerald-400 hover:text-emerald-300 text-xs font-semibold"
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setEditingEntryId(null);
+                                      setEditValues({});
+                                    }}
+                                    className="text-slate-400 hover:text-slate-300 text-xs"
+                                  >
+                                    Cancel
+                                  </button>
+                                </React.Fragment>
+                              ) : (
+                                <React.Fragment>
+                                  <button
+                                    onClick={() => startEditingEntry(entry)}
+                                    className="text-blue-400 hover:text-blue-300 text-xs font-semibold"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={() => deleteEntry(entry.id)}
+                                    className="text-slate-400 hover:text-red-400 transition"
+                                  >
+                                    <XIcon className="w-4 h-4" />
+                                  </button>
+                                </React.Fragment>
+                              )}
+                            </div>
+                          </div>
+                          {isEditing ? (
+                            <div className="grid grid-cols-2 gap-2 text-sm">
+                              <div>
+                                <div className="text-xs text-slate-400 mb-1">Qty</div>
+                                <input
+                                  type="number"
+                                  value={editValues.contracts}
+                                  onChange={(e) => {
+                                    const newVals = Object.assign({}, editValues);
+                                    newVals.contracts = e.target.value;
+                                    setEditValues(newVals);
+                                  }}
+                                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm"
+                                />
+                              </div>
+                              <div>
+                                <div className="text-xs text-slate-400 mb-1">Entry Price</div>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={editValues.entryPrice}
+                                  onChange={(e) => {
+                                    const newVals = Object.assign({}, editValues);
+                                    newVals.entryPrice = e.target.value;
+                                    setEditValues(newVals);
+                                  }}
+                                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm"
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-2 gap-2 text-sm">
+                              <div>
+                                <div className="text-xs text-slate-400">Qty</div>
+                                <div className="font-semibold text-white">{entry.contracts}</div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-slate-400">Entry Price</div>
+                                <div className="font-semibold text-emerald-400">
+                                  ${formatMoney(entry.entryPrice)}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <div className="bg-slate-800 rounded-lg p-3 mb-3 border border-slate-700">
+                  <h2 className="text-sm font-bold text-red-400 mb-2">Theoretical Exit (Simulator)</h2>
+                  <div className="grid grid-cols-3 gap-2">
+                    <input
+                      type="text"
+                      value={symbol}
+                      onChange={(e) => setSymbol(e.target.value)}
+                      className="bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
+                      placeholder="Symbol"
+                    />
+                    <input
+                      type="number"
+                      value={exitContracts}
+                      onChange={(e) => setExitContracts(e.target.value)}
+                      className="bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
+                      placeholder="Qty"
+                    />
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={exitPrice}
+                      onChange={(e) => setExitPrice(e.target.value)}
+                      className="bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
+                      placeholder="Price"
+                    />
+                  </div>
+                  <button
+                    onClick={addExit}
+                    className="w-full mt-2 bg-red-600 hover:bg-red-700 text-white font-semibold py-2 rounded transition text-sm"
+                  >
+                    Add Theoretical Exit
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-sm font-semibold text-slate-400">Theoretical Exits</h3>
+                    <div className="text-sm">
+                      <span className="text-slate-400">Total: </span>
+                      <span className={totalExitPnL >= 0 ? 'font-bold text-emerald-400' : 'font-bold text-red-400'}>
+                        {totalExitPnL >= 0 ? '+' : '-'}${formatMoneyWhole(Math.abs(totalExitPnL))}
+                      </span>
+                    </div>
+                  </div>
+                  {exits.length === 0 ? (
+                    <div className="text-center py-6 text-slate-500 bg-slate-800 rounded-lg border border-slate-700">
+                      <p className="text-xs">No theoretical exits yet</p>
+                    </div>
+                  ) : (
+                    exits.map((exit) => {
+                      const pos = positions[exit.symbol];
+                      const mult = multipliers[exit.symbol] || 1;
+                      const comparePrice = currentPrice ? parseFloat(currentPrice) : (pos ? pos.totalCost / pos.totalQty : 0);
+                      const pnl = (exit.exitPrice - comparePrice) * exit.contracts * mult;
+                      const isEditing = editingExitId === exit.id;
+                      const diff = exit.exitPrice - comparePrice;
+                      
+                      return (
+                        <div key={exit.id} className="bg-slate-800 rounded-lg p-3 border border-slate-700">
+                          <div className="flex justify-between items-center mb-2">
+                            <div className="flex items-center gap-2">
+                              <div className="text-base font-bold text-white">{exit.symbol}</div>
+                              <div className="text-xs text-slate-400">{exit.date}</div>
+                            </div>
+                            <div className="flex gap-2">
+                              {isEditing ? (
+                                <React.Fragment>
+                                  <button
+                                    onClick={() => saveExitEdit(exit)}
+                                    className="text-emerald-400 hover:text-emerald-300 text-xs font-semibold"
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setEditingExitId(null);
+                                      setEditValues({});
+                                    }}
+                                    className="text-slate-400 hover:text-slate-300 text-xs"
+                                  >
+                                    Cancel
+                                  </button>
+                                </React.Fragment>
+                              ) : (
+                                <React.Fragment>
+                                  <button
+                                    onClick={() => startEditingExit(exit)}
+                                    className="text-blue-400 hover:text-blue-300 text-xs font-semibold"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={() => deleteExit(exit.id)}
+                                    className="text-slate-400 hover:text-red-400 transition"
+                                  >
+                                    <XIcon className="w-4 h-4" />
+                                  </button>
+                                </React.Fragment>
+                              )}
+                            </div>
+                          </div>
+                          {isEditing ? (
+                            <div className="grid grid-cols-4 gap-2 text-sm">
+                              <div>
+                                <div className="text-xs text-slate-400 mb-1">Qty</div>
+                                <input
+                                  type="number"
+                                  value={editValues.contracts}
+                                  onChange={(e) => {
+                                    const newVals = Object.assign({}, editValues);
+                                    newVals.contracts = e.target.value;
+                                    setEditValues(newVals);
+                                  }}
+                                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm"
+                                />
+                              </div>
+                              <div>
+                                <div className="text-xs text-slate-400 mb-1">Exit Price</div>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={editValues.exitPrice}
+                                  onChange={(e) => {
+                                    const newVals = Object.assign({}, editValues);
+                                    newVals.exitPrice = e.target.value;
+                                    setEditValues(newVals);
+                                  }}
+                                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm"
+                                />
+                              </div>
+                              <div>
+                                <div className="text-xs text-slate-400 mb-1">Diff</div>
+                                <div className="text-slate-500">-</div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-slate-400 mb-1">P&L</div>
+                                <div className="text-slate-500">-</div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-4 gap-2 text-sm">
+                              <div>
+                                <div className="text-xs text-slate-400">Qty</div>
+                                <div className="font-semibold text-white">{exit.contracts}</div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-slate-400">Exit Price</div>
+                                <div className="font-semibold text-red-400">
+                                  ${formatMoney(exit.exitPrice)}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-slate-400">Diff</div>
+                                <div className={diff >= 0 ? 'font-semibold text-emerald-400' : 'font-semibold text-red-400'}>
+                                  {diff >= 0 ? '+' : ''}{formatMoney(Math.abs(diff))}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-slate-400">P&L</div>
+                                {renderPnL(pnl)}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<FuturesTracker />);
+  </script>
+</body>
+</html>
