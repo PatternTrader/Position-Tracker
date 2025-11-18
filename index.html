@@ -103,6 +103,8 @@
       const [editingEntryId, setEditingEntryId] = useState(null);
       const [editingExitId, setEditingExitId] = useState(null);
       const [editValues, setEditValues] = useState({});
+      const [entrySortOrder, setEntrySortOrder] = useState('asc');
+      const [exitSortOrder, setExitSortOrder] = useState('asc');
       const screenshotRef = useRef(null);
 
       useEffect(() => {
@@ -451,6 +453,30 @@
         }
       }
 
+      function toggleEntrySort() {
+        setEntrySortOrder(entrySortOrder === 'asc' ? 'desc' : 'asc');
+      }
+
+      function toggleExitSort() {
+        setExitSortOrder(exitSortOrder === 'asc' ? 'desc' : 'asc');
+      }
+
+      const sortedEntries = [...entries].sort((a, b) => {
+        if (entrySortOrder === 'asc') {
+          return a.entryPrice - b.entryPrice;
+        } else {
+          return b.entryPrice - a.entryPrice;
+        }
+      });
+
+      const sortedExits = [...exits].sort((a, b) => {
+        if (exitSortOrder === 'asc') {
+          return a.exitPrice - b.exitPrice;
+        } else {
+          return b.exitPrice - a.exitPrice;
+        }
+      });
+
       return (
         <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-2 sm:p-3">
           <div className="max-w-6xl mx-auto" ref={screenshotRef}>
@@ -599,13 +625,21 @@
                 </div>
 
                 <div className="space-y-1.5">
-                  <h3 className="text-sm font-semibold text-slate-400">Entry Trades</h3>
-                  {entries.length === 0 ? (
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-sm font-semibold text-slate-400">Entry Trades</h3>
+                    <button
+                      onClick={toggleEntrySort}
+                      className="bg-slate-700 hover:bg-slate-600 text-white text-xs px-2 py-1 rounded transition"
+                    >
+                      Sort {entrySortOrder === 'asc' ? '↑' : '↓'}
+                    </button>
+                  </div>
+                  {sortedEntries.length === 0 ? (
                     <div className="text-center py-6 text-slate-500 bg-slate-800 rounded-lg border border-slate-700">
                       <p className="text-xs">No entries yet</p>
                     </div>
                   ) : (
-                    entries.map((entry) => {
+                    sortedEntries.map((entry) => {
                       const isEditing = editingEntryId === entry.id;
                       return (
                         <div key={entry.id} className="bg-slate-800 rounded-lg p-2 border border-slate-700">
@@ -740,19 +774,27 @@
                 <div className="space-y-1.5">
                   <div className="flex justify-between items-center">
                     <h3 className="text-sm font-semibold text-slate-400">Theoretical Exits</h3>
-                    <div className="text-xs sm:text-sm">
-                      <span className="text-slate-400">Total: </span>
-                      <span className={totalExitPnL >= 0 ? 'font-bold text-emerald-400' : 'font-bold text-red-400'}>
-                        {totalExitPnL >= 0 ? '+' : '-'}${formatMoneyWhole(Math.abs(totalExitPnL))}
-                      </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={toggleExitSort}
+                        className="bg-slate-700 hover:bg-slate-600 text-white text-xs px-2 py-1 rounded transition"
+                      >
+                        Sort {exitSortOrder === 'asc' ? '↑' : '↓'}
+                      </button>
+                      <div className="text-xs sm:text-sm">
+                        <span className="text-slate-400">Total: </span>
+                        <span className={totalExitPnL >= 0 ? 'font-bold text-emerald-400' : 'font-bold text-red-400'}>
+                          {totalExitPnL >= 0 ? '+' : '-'}${formatMoneyWhole(Math.abs(totalExitPnL))}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                  {exits.length === 0 ? (
+                  {sortedExits.length === 0 ? (
                     <div className="text-center py-6 text-slate-500 bg-slate-800 rounded-lg border border-slate-700">
                       <p className="text-xs">No theoretical exits yet</p>
                     </div>
                   ) : (
-                    exits.map((exit) => {
+                    sortedExits.map((exit) => {
                       const pos = positions[exit.symbol];
                       const mult = multipliers[exit.symbol] || 1;
                       const comparePrice = currentPrice ? parseFloat(currentPrice) : (pos ? pos.totalCost / pos.totalQty : 0);
