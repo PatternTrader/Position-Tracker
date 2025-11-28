@@ -565,10 +565,28 @@
         ? (parseFloat(targetPrice) - theoAvgEntry) * theoOpenQty * theoMultiplier
         : null;
 
+      // Theo Potential P&L (Theo Target P&L - Theo Current P&L)
+      const theoPotentialPnL = (theoTargetProfit !== null && theoCurrentProfit !== null)
+        ? theoTargetProfit - theoCurrentProfit
+        : null;
+
+      // Calculate Potential P&L (Target P&L - Current P&L)
+      const potentialPnL = (targetProfit !== null && currentProfit !== null) 
+        ? targetProfit - currentProfit 
+        : null;
+
       let newAccountBalance = null;
+      let targetBalance = null;
+      let theoTargetBalance = null;
       if (accountBalance) {
         const balanceValue = parseFloat(accountBalance.replace(/,/g, ''));
         newAccountBalance = balanceValue + totalExitPnL;
+        if (potentialPnL !== null) {
+          targetBalance = balanceValue + potentialPnL;
+        }
+        if (theoPotentialPnL !== null) {
+          theoTargetBalance = balanceValue + theoPotentialPnL;
+        }
       }
 
       function renderPnL(pnl) {
@@ -739,7 +757,7 @@
                     </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2 bg-slate-800 rounded-lg p-2 border border-slate-700">
+                <div className="grid grid-cols-3 gap-2 bg-slate-800 rounded-lg p-2 border border-slate-700">
                   <div>
                     <div className="text-xs text-slate-400">Current Price</div>
                     <input
@@ -762,8 +780,14 @@
                       placeholder="Enter"
                     />
                   </div>
+                  <div>
+                    <div className="text-xs text-slate-400">Target Balance</div>
+                    <div className="text-base font-bold text-amber-400 mt-1">
+                      {targetBalance !== null ? '$' + formatMoneyWhole(targetBalance) : '-'}
+                    </div>
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2 bg-slate-800 rounded-lg p-2 border border-slate-700">
+                <div className="grid grid-cols-3 gap-2 bg-slate-800 rounded-lg p-2 border border-slate-700">
                   <div>
                     <div className="text-xs text-slate-400">Current P&L</div>
                     <div className="text-base font-bold">
@@ -780,6 +804,16 @@
                       {targetProfit !== null ? (
                         <span className={targetProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}>
                           {targetProfit >= 0 ? '+$' : '-$'}{formatMoneyWhole(Math.abs(targetProfit))}
+                        </span>
+                      ) : '-'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-400">Potential P&L</div>
+                    <div className="text-base font-bold">
+                      {potentialPnL !== null ? (
+                        <span className={potentialPnL >= 0 ? 'text-amber-400' : 'text-red-400'}>
+                          {potentialPnL >= 0 ? '+$' : '-$'}{formatMoneyWhole(Math.abs(potentialPnL))}
                         </span>
                       ) : '-'}
                     </div>
@@ -1181,7 +1215,7 @@
                 {/* Theoretical Position Stats */}
                 <div className="bg-gradient-to-br from-purple-900/50 to-purple-950/50 rounded-lg p-3 border border-purple-700">
                   <h3 className="text-sm font-bold text-purple-300 mb-2">Theoretical Position (Actual + Simulated Entries)</h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
                     <div>
                       <div className="text-xs text-purple-300">Theo Open Qty</div>
                       <div className="text-lg font-bold text-purple-400">{theoOpenQty}</div>
@@ -1205,6 +1239,8 @@
                         ) : '-'}
                       </div>
                     </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
                     <div>
                       <div className="text-xs text-purple-300">Theo Target P&L</div>
                       <div className="text-lg font-bold">
@@ -1213,6 +1249,22 @@
                             {theoTargetProfit >= 0 ? '+$' : '-$'}{formatMoneyWhole(Math.abs(theoTargetProfit))}
                           </span>
                         ) : '-'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-purple-300">Theo Potential P&L</div>
+                      <div className="text-lg font-bold">
+                        {theoPotentialPnL !== null ? (
+                          <span className="text-amber-400">
+                            {theoPotentialPnL >= 0 ? '+$' : '-$'}{formatMoneyWhole(Math.abs(theoPotentialPnL))}
+                          </span>
+                        ) : '-'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-purple-300">Theo Target Balance</div>
+                      <div className="text-lg font-bold text-amber-400">
+                        {theoTargetBalance !== null ? '$' + formatMoneyWhole(theoTargetBalance) : '-'}
                       </div>
                     </div>
                   </div>
