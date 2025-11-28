@@ -91,20 +91,26 @@
     function FuturesTracker() {
       const [entries, setEntries] = useState([]);
       const [exits, setExits] = useState([]);
+      const [theoreticalEntries, setTheoreticalEntries] = useState([]);
       const [symbol, setSymbol] = useState('');
       const [contracts, setContracts] = useState('');
       const [entryPrice, setEntryPrice] = useState('');
       const [exitContracts, setExitContracts] = useState('');
       const [exitPrice, setExitPrice] = useState('');
+      const [theoContracts, setTheoContracts] = useState('');
+      const [theoEntryPrice, setTheoEntryPrice] = useState('');
       const [targetPrice, setTargetPrice] = useState('');
       const [currentPrice, setCurrentPrice] = useState('');
       const [accountBalance, setAccountBalance] = useState('');
       const [multipliers, setMultipliers] = useState({});
       const [editingEntryId, setEditingEntryId] = useState(null);
       const [editingExitId, setEditingExitId] = useState(null);
+      const [editingTheoEntryId, setEditingTheoEntryId] = useState(null);
       const [editValues, setEditValues] = useState({});
       const [entrySortOrder, setEntrySortOrder] = useState('asc');
       const [exitSortOrder, setExitSortOrder] = useState('asc');
+      const [theoEntrySortOrder, setTheoEntrySortOrder] = useState('asc');
+      const [activeTab, setActiveTab] = useState('actual');
       const screenshotRef = useRef(null);
 
       useEffect(() => {
@@ -162,6 +168,19 @@
             );
             setExits(exitData.filter(t => t !== null).sort((a, b) => 
               b.exitPrice - a.exitPrice
+            ));
+          }
+
+          const theoEntryResult = await storage.list('theoEntry:');
+          if (theoEntryResult && theoEntryResult.keys) {
+            const theoEntryData = await Promise.all(
+              theoEntryResult.keys.map(async (key) => {
+                const data = await storage.get(key);
+                return data ? JSON.parse(data.value) : null;
+              })
+            );
+            setTheoreticalEntries(theoEntryData.filter(t => t !== null).sort((a, b) => 
+              new Date(b.timestamp) - new Date(a.timestamp)
             ));
           }
 
@@ -299,6 +318,49 @@
         }
       }
 
+      async function addTheoreticalEntry() {
+        if (!symbol || !theoContracts || !theoEntryPrice) {
+          alert('Please fill in Symbol, Contracts, and Entry Price');
+          return;
+        }
+
+        const symUpper = symbol.toUpperCase();
+        
+        if (!multipliers[symUpper]) {
+          const commonMultipliers = {
+            'GC': 100,
+            'SI': 5000,
+            'ES': 50,
+            'NQ': 20,
+            'CL': 1000,
+            'ZB': 1000,
+            'ZN': 1000
+          };
+          if (commonMultipliers[symUpper]) {
+            await saveMultiplier(symUpper, commonMultipliers[symUpper]);
+          }
+        }
+
+        const theoEntry = {
+          id: Date.now().toString(),
+          symbol: symUpper,
+          contracts: parseInt(theoContracts),
+          entryPrice: parseFloat(theoEntryPrice),
+          timestamp: new Date().toISOString(),
+          date: new Date().toLocaleDateString()
+        };
+
+        try {
+          await storage.set('theoEntry:' + theoEntry.id, JSON.stringify(theoEntry));
+          await loadData();
+          
+          setTheoContracts('');
+          setTheoEntryPrice('');
+        } catch (error) {
+          alert('Error saving theoretical entry');
+        }
+      }
+
       async function deleteEntry(id) {
         try {
           await storage.delete('entry:' + id);
@@ -314,6 +376,15 @@
           await loadData();
         } catch (error) {
           alert('Error deleting exit');
+        }
+      }
+
+      async function deleteTheoreticalEntry(id) {
+        try {
+          await storage.delete('theoEntry:' + id);
+          await loadData();
+        } catch (error) {
+          alert('Error deleting theoretical entry');
         }
       }
 
@@ -339,6 +410,17 @@
         }
       }
 
+      async function updateTheoreticalEntry(theoEntry) {
+        try {
+          await storage.set('theoEntry:' + theoEntry.id, JSON.stringify(theoEntry));
+          await loadData();
+          setEditingTheoEntryId(null);
+          setEditValues({});
+        } catch (error) {
+          alert('Error updating theoretical entry');
+        }
+      }
+
       function startEditingEntry(entry) {
         setEditingEntryId(entry.id);
         setEditValues({
@@ -355,6 +437,14 @@
         });
       }
 
+      function startEditingTheoEntry(theoEntry) {
+        setEditingTheoEntryId(theoEntry.id);
+        setEditValues({
+          contracts: theoEntry.contracts,
+          entryPrice: theoEntry.entryPrice
+        });
+      }
+
       function saveEntryEdit(entry) {
         const updated = Object.assign({}, entry);
         updated.contracts = parseInt(editValues.contracts) || entry.contracts;
@@ -367,6 +457,13 @@
         updated.contracts = parseInt(editValues.contracts) || exit.contracts;
         updated.exitPrice = parseFloat(editValues.exitPrice) || exit.exitPrice;
         updateExit(updated);
+      }
+
+      function saveTheoEntryEdit(theoEntry) {
+        const updated = Object.assign({}, theoEntry);
+        updated.contracts = parseInt(editValues.contracts) || theoEntry.contracts;
+        updated.entryPrice = parseFloat(editValues.entryPrice) || theoEntry.entryPrice;
+        updateTheoreticalEntry(updated);
       }
 
       function formatMoney(val) {
@@ -391,13 +488,44 @@
         return positions;
       }
 
+      function calculateTheoreticalPositions() {
+        const positions = calculatePositions();
+        const theoPositions = {};
+        
+        // Copy actual positions
+        Object.keys(positions).forEach(sym => {
+          theoPositions[sym] = { 
+            totalQty: positions[sym].totalQty, 
+            totalCost: positions[sym].totalCost 
+          };
+        });
+        
+        // Add theoretical entries
+        theoreticalEntries.forEach(entry => {
+          if (!theoPositions[entry.symbol]) {
+            theoPositions[entry.symbol] = { totalQty: 0, totalCost: 0 };
+          }
+          theoPositions[entry.symbol].totalQty += entry.contracts;
+          theoPositions[entry.symbol].totalCost += entry.contracts * entry.entryPrice;
+        });
+
+        return theoPositions;
+      }
+
       const positions = calculatePositions();
+      const theoPositions = calculateTheoreticalPositions();
       
       const openSymbol = Object.keys(positions)[0] || '';
       const openQty = openSymbol ? positions[openSymbol].totalQty : 0;
       const avgEntry = openSymbol && openQty > 0 ? positions[openSymbol].totalCost / positions[openSymbol].totalQty : 0;
       
+      // Theoretical position stats
+      const theoOpenSymbol = Object.keys(theoPositions)[0] || '';
+      const theoOpenQty = theoOpenSymbol ? theoPositions[theoOpenSymbol].totalQty : 0;
+      const theoAvgEntry = theoOpenSymbol && theoOpenQty > 0 ? theoPositions[theoOpenSymbol].totalCost / theoPositions[theoOpenSymbol].totalQty : 0;
+      
       const currentMultiplier = parseFloat(multipliers[openSymbol]) || 1;
+      const theoMultiplier = parseFloat(multipliers[theoOpenSymbol]) || 1;
       
       const totalExitPnL = exits.reduce((sum, exit) => {
         const pos = positions[exit.symbol];
@@ -413,6 +541,15 @@
 
       const currentProfit = currentPrice && openQty > 0
         ? (parseFloat(currentPrice) - avgEntry) * openQty * currentMultiplier
+        : null;
+
+      // Theoretical P&L calculations
+      const theoCurrentProfit = currentPrice && theoOpenQty > 0
+        ? (parseFloat(currentPrice) - theoAvgEntry) * theoOpenQty * theoMultiplier
+        : null;
+
+      const theoTargetProfit = targetPrice && theoOpenQty > 0
+        ? (parseFloat(targetPrice) - theoAvgEntry) * theoOpenQty * theoMultiplier
         : null;
 
       let newAccountBalance = null;
@@ -467,6 +604,10 @@
         setExitSortOrder(exitSortOrder === 'asc' ? 'desc' : 'asc');
       }
 
+      function toggleTheoEntrySort() {
+        setTheoEntrySortOrder(theoEntrySortOrder === 'asc' ? 'desc' : 'asc');
+      }
+
       const sortedEntries = [...entries].sort((a, b) => {
         if (entrySortOrder === 'asc') {
           return a.entryPrice - b.entryPrice;
@@ -480,6 +621,14 @@
           return a.exitPrice - b.exitPrice;
         } else {
           return b.exitPrice - a.exitPrice;
+        }
+      });
+
+      const sortedTheoEntries = [...theoreticalEntries].sort((a, b) => {
+        if (theoEntrySortOrder === 'asc') {
+          return a.entryPrice - b.entryPrice;
+        } else {
+          return b.entryPrice - a.entryPrice;
         }
       });
 
@@ -498,6 +647,30 @@
                 >
                   <CameraIcon className="w-4 h-4" />
                   <span className="hidden sm:inline">Screenshot</span>
+                </button>
+              </div>
+
+              {/* Tab Toggle */}
+              <div className="flex mb-3 bg-slate-800 rounded-lg p-1 border border-slate-700">
+                <button
+                  onClick={() => setActiveTab('actual')}
+                  className={`flex-1 py-2 px-4 rounded-md text-sm font-semibold transition ${
+                    activeTab === 'actual' 
+                      ? 'bg-emerald-600 text-white' 
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Actual Position
+                </button>
+                <button
+                  onClick={() => setActiveTab('theoretical')}
+                  className={`flex-1 py-2 px-4 rounded-md text-sm font-semibold transition ${
+                    activeTab === 'theoretical' 
+                      ? 'bg-purple-600 text-white' 
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Theoretical Position
                 </button>
               </div>
 
@@ -593,10 +766,375 @@
               </div>
             </div>
 
-            <div className="space-y-3 sm:grid sm:grid-cols-2 sm:gap-3 sm:space-y-0">
-              <div>
-                <div className="bg-slate-800 rounded-lg p-2 mb-2 border border-slate-700">
-                  <h2 className="text-sm font-bold text-emerald-400 mb-2">Entry Trade</h2>
+            {/* ACTUAL POSITION TAB */}
+            {activeTab === 'actual' && (
+              <div className="space-y-3 sm:grid sm:grid-cols-2 sm:gap-3 sm:space-y-0">
+                <div>
+                  <div className="bg-slate-800 rounded-lg p-2 mb-2 border border-slate-700">
+                    <h2 className="text-sm font-bold text-emerald-400 mb-2">Entry Trade</h2>
+                    <div className="grid grid-cols-3 gap-2">
+                      <input
+                        type="text"
+                        value={symbol}
+                        onChange={(e) => setSymbol(e.target.value)}
+                        className="bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
+                        placeholder="Symbol"
+                      />
+                      <input
+                        type="number"
+                        value={contracts}
+                        onChange={(e) => setContracts(e.target.value)}
+                        className="bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
+                        placeholder="Qty"
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={entryPrice}
+                        onChange={(e) => setEntryPrice(e.target.value)}
+                        className="bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
+                        placeholder="Price"
+                      />
+                    </div>
+                    <button
+                      onClick={addEntry}
+                      className="w-full mt-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 rounded transition text-sm"
+                    >
+                      Add Entry
+                    </button>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-sm font-semibold text-slate-400">Entry Trades</h3>
+                      <button
+                        onClick={toggleEntrySort}
+                        className="bg-slate-700 hover:bg-slate-600 text-white text-xs px-2 py-1 rounded transition"
+                      >
+                        Sort {entrySortOrder === 'asc' ? '↑' : '↓'}
+                      </button>
+                    </div>
+                    {sortedEntries.length === 0 ? (
+                      <div className="text-center py-6 text-slate-500 bg-slate-800 rounded-lg border border-slate-700">
+                        <p className="text-xs">No entries yet</p>
+                      </div>
+                    ) : (
+                      sortedEntries.map((entry) => {
+                        const isEditing = editingEntryId === entry.id;
+                        return (
+                          <div key={entry.id} className="bg-slate-800 rounded-lg p-2 border border-slate-700">
+                            <div className="flex justify-between items-center mb-1.5">
+                              <div className="flex items-center gap-2">
+                                <div className="text-base font-bold text-white">{entry.symbol}</div>
+                                <div className="text-xs text-slate-400">{entry.date}</div>
+                              </div>
+                              <div className="flex gap-2">
+                                {isEditing ? (
+                                  <React.Fragment>
+                                    <button
+                                      onClick={() => saveEntryEdit(entry)}
+                                      className="text-emerald-400 hover:text-emerald-300 text-xs font-semibold px-2 py-1"
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setEditingEntryId(null);
+                                        setEditValues({});
+                                      }}
+                                      className="text-slate-400 hover:text-slate-300 text-xs px-2 py-1"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </React.Fragment>
+                                ) : (
+                                  <React.Fragment>
+                                    <button
+                                      onClick={() => startEditingEntry(entry)}
+                                      className="text-blue-400 hover:text-blue-300 text-xs font-semibold px-2 py-1"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      onClick={() => deleteEntry(entry.id)}
+                                      className="text-slate-400 hover:text-red-400 transition p-1"
+                                    >
+                                      <XIcon className="w-5 h-5" />
+                                    </button>
+                                  </React.Fragment>
+                                )}
+                              </div>
+                            </div>
+                            {isEditing ? (
+                              <div className="grid grid-cols-2 gap-2 text-sm">
+                                <div>
+                                  <div className="text-xs text-slate-400 mb-1">Qty</div>
+                                  <input
+                                    type="number"
+                                    value={editValues.contracts}
+                                    onChange={(e) => {
+                                      const newVals = Object.assign({}, editValues);
+                                      newVals.contracts = e.target.value;
+                                      setEditValues(newVals);
+                                    }}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
+                                  />
+                                </div>
+                                <div>
+                                  <div className="text-xs text-slate-400 mb-1">Entry Price</div>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={editValues.entryPrice}
+                                    onChange={(e) => {
+                                      const newVals = Object.assign({}, editValues);
+                                      newVals.entryPrice = e.target.value;
+                                      setEditValues(newVals);
+                                    }}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
+                                  />
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-2 gap-2 text-sm">
+                                <div>
+                                  <div className="text-xs text-slate-400">Qty</div>
+                                  <div className="font-semibold text-white text-base">{entry.contracts}</div>
+                                </div>
+                                <div>
+                                  <div className="text-xs text-slate-400">Entry Price</div>
+                                  <div className="font-semibold text-emerald-400 text-base">
+                                    ${formatMoney(entry.entryPrice)}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="bg-slate-800 rounded-lg p-2 mb-2 border border-slate-700">
+                    <h2 className="text-sm font-bold text-red-400 mb-2">Theoretical Exit (Simulator)</h2>
+                    <div className="grid grid-cols-3 gap-2">
+                      <input
+                        type="text"
+                        value={symbol}
+                        onChange={(e) => setSymbol(e.target.value)}
+                        className="bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
+                        placeholder="Symbol"
+                      />
+                      <input
+                        type="number"
+                        value={exitContracts}
+                        onChange={(e) => setExitContracts(e.target.value)}
+                        className="bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
+                        placeholder="Qty"
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={exitPrice}
+                        onChange={(e) => setExitPrice(e.target.value)}
+                        className="bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
+                        placeholder="Price"
+                      />
+                    </div>
+                    <button
+                      onClick={addExit}
+                      className="w-full mt-2 bg-red-600 hover:bg-red-700 text-white font-semibold py-2 rounded transition text-sm"
+                    >
+                      Add Theoretical Exit
+                    </button>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-sm font-semibold text-slate-400">Theoretical Exits</h3>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={toggleExitSort}
+                          className="bg-slate-700 hover:bg-slate-600 text-white text-xs px-2 py-1 rounded transition"
+                        >
+                          Sort {exitSortOrder === 'asc' ? '↑' : '↓'}
+                        </button>
+                        <div className="text-xs sm:text-sm">
+                          <span className="text-slate-400">Total: </span>
+                          <span className={totalExitPnL >= 0 ? 'font-bold text-emerald-400' : 'font-bold text-red-400'}>
+                            {totalExitPnL >= 0 ? '+' : '-'}${formatMoneyWhole(Math.abs(totalExitPnL))}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    {sortedExits.length === 0 ? (
+                      <div className="text-center py-6 text-slate-500 bg-slate-800 rounded-lg border border-slate-700">
+                        <p className="text-xs">No theoretical exits yet</p>
+                      </div>
+                    ) : (
+                      sortedExits.map((exit) => {
+                        const pos = positions[exit.symbol];
+                        const mult = multipliers[exit.symbol] || 1;
+                        const comparePrice = currentPrice ? parseFloat(currentPrice) : (pos ? pos.totalCost / pos.totalQty : 0);
+                        const pnl = (exit.exitPrice - comparePrice) * exit.contracts * mult;
+                        const isEditing = editingExitId === exit.id;
+                        const diff = exit.exitPrice - comparePrice;
+                        
+                        return (
+                          <div key={exit.id} className="bg-slate-800 rounded-lg p-2 border border-slate-700">
+                            <div className="flex justify-between items-center mb-1.5">
+                              <div className="flex items-center gap-2">
+                                <div className="text-base font-bold text-white">{exit.symbol}</div>
+                                <div className="text-xs text-slate-400">{exit.date}</div>
+                              </div>
+                              <div className="flex gap-2">
+                                {isEditing ? (
+                                  <React.Fragment>
+                                    <button
+                                      onClick={() => saveExitEdit(exit)}
+                                      className="text-emerald-400 hover:text-emerald-300 text-xs font-semibold px-2 py-1"
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setEditingExitId(null);
+                                        setEditValues({});
+                                      }}
+                                      className="text-slate-400 hover:text-slate-300 text-xs px-2 py-1"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </React.Fragment>
+                                ) : (
+                                  <React.Fragment>
+                                    <button
+                                      onClick={() => startEditingExit(exit)}
+                                      className="text-blue-400 hover:text-blue-300 text-xs font-semibold px-2 py-1"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      onClick={() => deleteExit(exit.id)}
+                                      className="text-slate-400 hover:text-red-400 transition p-1"
+                                    >
+                                      <XIcon className="w-5 h-5" />
+                                    </button>
+                                  </React.Fragment>
+                                )}
+                              </div>
+                            </div>
+                            {isEditing ? (
+                              <div className="grid grid-cols-2 gap-2 text-sm">
+                                <div>
+                                  <div className="text-xs text-slate-400 mb-1">Qty</div>
+                                  <input
+                                    type="number"
+                                    value={editValues.contracts}
+                                    onChange={(e) => {
+                                      const newVals = Object.assign({}, editValues);
+                                      newVals.contracts = e.target.value;
+                                      setEditValues(newVals);
+                                    }}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
+                                  />
+                                </div>
+                                <div>
+                                  <div className="text-xs text-slate-400 mb-1">Exit Price</div>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={editValues.exitPrice}
+                                    onChange={(e) => {
+                                      const newVals = Object.assign({}, editValues);
+                                      newVals.exitPrice = e.target.value;
+                                      setEditValues(newVals);
+                                    }}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
+                                  />
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-4 gap-2 text-sm">
+                                <div>
+                                  <div className="text-xs text-slate-400">Qty</div>
+                                  <div className="font-semibold text-white text-base">{exit.contracts}</div>
+                                </div>
+                                <div>
+                                  <div className="text-xs text-slate-400">Exit Price</div>
+                                  <div className="font-semibold text-red-400 text-base">
+                                    ${formatMoney(exit.exitPrice)}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-xs text-slate-400">Diff</div>
+                                  <div className={diff >= 0 ? 'font-semibold text-emerald-400 text-sm' : 'font-semibold text-red-400 text-sm'}>
+                                    {diff >= 0 ? '+' : ''}{formatMoney(Math.abs(diff))}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-xs text-slate-400">P&L</div>
+                                  {renderPnL(pnl)}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* THEORETICAL POSITION TAB */}
+            {activeTab === 'theoretical' && (
+              <div className="space-y-3">
+                {/* Theoretical Position Stats */}
+                <div className="bg-gradient-to-br from-purple-900/50 to-purple-950/50 rounded-lg p-3 border border-purple-700">
+                  <h3 className="text-sm font-bold text-purple-300 mb-2">Theoretical Position (Actual + Simulated Entries)</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div>
+                      <div className="text-xs text-purple-300">Theo Open Qty</div>
+                      <div className="text-lg font-bold text-purple-400">{theoOpenQty}</div>
+                      <div className="text-xs text-slate-500">
+                        {theoOpenSymbol && theoOpenSymbol + ' x' + theoMultiplier}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-purple-300">Theo Avg Entry</div>
+                      <div className="text-lg font-bold text-white">
+                        {theoOpenQty > 0 ? '$' + formatMoney(theoAvgEntry) : '-'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-purple-300">Theo Current P&L</div>
+                      <div className="text-lg font-bold">
+                        {theoCurrentProfit !== null ? (
+                          <span className={theoCurrentProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                            {theoCurrentProfit >= 0 ? '+$' : '-$'}{formatMoneyWhole(Math.abs(theoCurrentProfit))}
+                          </span>
+                        ) : '-'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-purple-300">Theo Target P&L</div>
+                      <div className="text-lg font-bold">
+                        {theoTargetProfit !== null ? (
+                          <span className={theoTargetProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                            {theoTargetProfit >= 0 ? '+$' : '-$'}{formatMoneyWhole(Math.abs(theoTargetProfit))}
+                          </span>
+                        ) : '-'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Add Theoretical Entry Form */}
+                <div className="bg-slate-800 rounded-lg p-2 border border-slate-700">
+                  <h2 className="text-sm font-bold text-purple-400 mb-2">Theoretical Entry (Simulator)</h2>
                   <div className="grid grid-cols-3 gap-2">
                     <input
                       type="text"
@@ -607,64 +1145,67 @@
                     />
                     <input
                       type="number"
-                      value={contracts}
-                      onChange={(e) => setContracts(e.target.value)}
+                      value={theoContracts}
+                      onChange={(e) => setTheoContracts(e.target.value)}
                       className="bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
                       placeholder="Qty"
                     />
                     <input
                       type="number"
                       step="0.01"
-                      value={entryPrice}
-                      onChange={(e) => setEntryPrice(e.target.value)}
+                      value={theoEntryPrice}
+                      onChange={(e) => setTheoEntryPrice(e.target.value)}
                       className="bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
                       placeholder="Price"
                     />
                   </div>
                   <button
-                    onClick={addEntry}
-                    className="w-full mt-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 rounded transition text-sm"
+                    onClick={addTheoreticalEntry}
+                    className="w-full mt-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 rounded transition text-sm"
                   >
-                    Add Entry
+                    Add Theoretical Entry
                   </button>
                 </div>
 
+                {/* Theoretical Entries List */}
                 <div className="space-y-1.5">
                   <div className="flex justify-between items-center">
-                    <h3 className="text-sm font-semibold text-slate-400">Entry Trades</h3>
+                    <h3 className="text-sm font-semibold text-slate-400">Theoretical Entries</h3>
                     <button
-                      onClick={toggleEntrySort}
+                      onClick={toggleTheoEntrySort}
                       className="bg-slate-700 hover:bg-slate-600 text-white text-xs px-2 py-1 rounded transition"
                     >
-                      Sort {entrySortOrder === 'asc' ? '↑' : '↓'}
+                      Sort {theoEntrySortOrder === 'asc' ? '↑' : '↓'}
                     </button>
                   </div>
-                  {sortedEntries.length === 0 ? (
+                  {sortedTheoEntries.length === 0 ? (
                     <div className="text-center py-6 text-slate-500 bg-slate-800 rounded-lg border border-slate-700">
-                      <p className="text-xs">No entries yet</p>
+                      <p className="text-xs">No theoretical entries yet</p>
+                      <p className="text-xs text-slate-600 mt-1">Add entries to see how they affect your position</p>
                     </div>
                   ) : (
-                    sortedEntries.map((entry) => {
-                      const isEditing = editingEntryId === entry.id;
+                    sortedTheoEntries.map((theoEntry) => {
+                      const isEditing = editingTheoEntryId === theoEntry.id;
                       return (
-                        <div key={entry.id} className="bg-slate-800 rounded-lg p-2 border border-slate-700">
+                        <div key={theoEntry.id} className="bg-slate-800 rounded-lg p-2 border border-purple-700/50">
                           <div className="flex justify-between items-center mb-1.5">
                             <div className="flex items-center gap-2">
-                              <div className="text-base font-bold text-white">{entry.symbol}</div>
-                              <div className="text-xs text-slate-400">{entry.date}</div>
+                              <div className="text-base font-bold text-white">{theoEntry.symbol}</div>
+                              <div className="text-xs text-purple-400 bg-purple-900/30 px-1.5 py-0.5 rounded">THEO</div>
+                              <div className="text-xs text-slate-400">{theoEntry.date}</div>
                             </div>
                             <div className="flex gap-2">
                               {isEditing ? (
                                 <React.Fragment>
                                   <button
-                                    onClick={() => saveEntryEdit(entry)}
+                                    onClick={() => saveTheoEntryEdit(theoEntry)}
                                     className="text-emerald-400 hover:text-emerald-300 text-xs font-semibold px-2 py-1"
                                   >
                                     Save
                                   </button>
                                   <button
                                     onClick={() => {
-                                      setEditingEntryId(null);
+                                      setEditingTheoEntryId(null);
                                       setEditValues({});
                                     }}
                                     className="text-slate-400 hover:text-slate-300 text-xs px-2 py-1"
@@ -675,13 +1216,13 @@
                               ) : (
                                 <React.Fragment>
                                   <button
-                                    onClick={() => startEditingEntry(entry)}
+                                    onClick={() => startEditingTheoEntry(theoEntry)}
                                     className="text-blue-400 hover:text-blue-300 text-xs font-semibold px-2 py-1"
                                   >
                                     Edit
                                   </button>
                                   <button
-                                    onClick={() => deleteEntry(entry.id)}
+                                    onClick={() => deleteTheoreticalEntry(theoEntry.id)}
                                     className="text-slate-400 hover:text-red-400 transition p-1"
                                   >
                                     <XIcon className="w-5 h-5" />
@@ -724,12 +1265,12 @@
                             <div className="grid grid-cols-2 gap-2 text-sm">
                               <div>
                                 <div className="text-xs text-slate-400">Qty</div>
-                                <div className="font-semibold text-white text-base">{entry.contracts}</div>
+                                <div className="font-semibold text-white text-base">{theoEntry.contracts}</div>
                               </div>
                               <div>
                                 <div className="text-xs text-slate-400">Entry Price</div>
-                                <div className="font-semibold text-emerald-400 text-base">
-                                  ${formatMoney(entry.entryPrice)}
+                                <div className="font-semibold text-purple-400 text-base">
+                                  ${formatMoney(theoEntry.entryPrice)}
                                 </div>
                               </div>
                             </div>
@@ -740,178 +1281,7 @@
                   )}
                 </div>
               </div>
-
-              <div>
-                <div className="bg-slate-800 rounded-lg p-2 mb-2 border border-slate-700">
-                  <h2 className="text-sm font-bold text-red-400 mb-2">Theoretical Exit (Simulator)</h2>
-                  <div className="grid grid-cols-3 gap-2">
-                    <input
-                      type="text"
-                      value={symbol}
-                      onChange={(e) => setSymbol(e.target.value)}
-                      className="bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
-                      placeholder="Symbol"
-                    />
-                    <input
-                      type="number"
-                      value={exitContracts}
-                      onChange={(e) => setExitContracts(e.target.value)}
-                      className="bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
-                      placeholder="Qty"
-                    />
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={exitPrice}
-                      onChange={(e) => setExitPrice(e.target.value)}
-                      className="bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
-                      placeholder="Price"
-                    />
-                  </div>
-                  <button
-                    onClick={addExit}
-                    className="w-full mt-2 bg-red-600 hover:bg-red-700 text-white font-semibold py-2 rounded transition text-sm"
-                  >
-                    Add Theoretical Exit
-                  </button>
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-sm font-semibold text-slate-400">Theoretical Exits</h3>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={toggleExitSort}
-                        className="bg-slate-700 hover:bg-slate-600 text-white text-xs px-2 py-1 rounded transition"
-                      >
-                        Sort {exitSortOrder === 'asc' ? '↑' : '↓'}
-                      </button>
-                      <div className="text-xs sm:text-sm">
-                        <span className="text-slate-400">Total: </span>
-                        <span className={totalExitPnL >= 0 ? 'font-bold text-emerald-400' : 'font-bold text-red-400'}>
-                          {totalExitPnL >= 0 ? '+' : '-'}${formatMoneyWhole(Math.abs(totalExitPnL))}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  {sortedExits.length === 0 ? (
-                    <div className="text-center py-6 text-slate-500 bg-slate-800 rounded-lg border border-slate-700">
-                      <p className="text-xs">No theoretical exits yet</p>
-                    </div>
-                  ) : (
-                    sortedExits.map((exit) => {
-                      const pos = positions[exit.symbol];
-                      const mult = multipliers[exit.symbol] || 1;
-                      const comparePrice = currentPrice ? parseFloat(currentPrice) : (pos ? pos.totalCost / pos.totalQty : 0);
-                      const pnl = (exit.exitPrice - comparePrice) * exit.contracts * mult;
-                      const isEditing = editingExitId === exit.id;
-                      const diff = exit.exitPrice - comparePrice;
-                      
-                      return (
-                        <div key={exit.id} className="bg-slate-800 rounded-lg p-2 border border-slate-700">
-                          <div className="flex justify-between items-center mb-1.5">
-                            <div className="flex items-center gap-2">
-                              <div className="text-base font-bold text-white">{exit.symbol}</div>
-                              <div className="text-xs text-slate-400">{exit.date}</div>
-                            </div>
-                            <div className="flex gap-2">
-                              {isEditing ? (
-                                <React.Fragment>
-                                  <button
-                                    onClick={() => saveExitEdit(exit)}
-                                    className="text-emerald-400 hover:text-emerald-300 text-xs font-semibold px-2 py-1"
-                                  >
-                                    Save
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setEditingExitId(null);
-                                      setEditValues({});
-                                    }}
-                                    className="text-slate-400 hover:text-slate-300 text-xs px-2 py-1"
-                                  >
-                                    Cancel
-                                  </button>
-                                </React.Fragment>
-                              ) : (
-                                <React.Fragment>
-                                  <button
-                                    onClick={() => startEditingExit(exit)}
-                                    className="text-blue-400 hover:text-blue-300 text-xs font-semibold px-2 py-1"
-                                  >
-                                    Edit
-                                  </button>
-                                  <button
-                                    onClick={() => deleteExit(exit.id)}
-                                    className="text-slate-400 hover:text-red-400 transition p-1"
-                                  >
-                                    <XIcon className="w-5 h-5" />
-                                  </button>
-                                </React.Fragment>
-                              )}
-                            </div>
-                          </div>
-                          {isEditing ? (
-                            <div className="grid grid-cols-2 gap-2 text-sm">
-                              <div>
-                                <div className="text-xs text-slate-400 mb-1">Qty</div>
-                                <input
-                                  type="number"
-                                  value={editValues.contracts}
-                                  onChange={(e) => {
-                                    const newVals = Object.assign({}, editValues);
-                                    newVals.contracts = e.target.value;
-                                    setEditValues(newVals);
-                                  }}
-                                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
-                                />
-                              </div>
-                              <div>
-                                <div className="text-xs text-slate-400 mb-1">Exit Price</div>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  value={editValues.exitPrice}
-                                  onChange={(e) => {
-                                    const newVals = Object.assign({}, editValues);
-                                    newVals.exitPrice = e.target.value;
-                                    setEditValues(newVals);
-                                  }}
-                                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
-                                />
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="grid grid-cols-4 gap-2 text-sm">
-                              <div>
-                                <div className="text-xs text-slate-400">Qty</div>
-                                <div className="font-semibold text-white text-base">{exit.contracts}</div>
-                              </div>
-                              <div>
-                                <div className="text-xs text-slate-400">Exit Price</div>
-                                <div className="font-semibold text-red-400 text-base">
-                                  ${formatMoney(exit.exitPrice)}
-                                </div>
-                              </div>
-                              <div>
-                                <div className="text-xs text-slate-400">Diff</div>
-                                <div className={diff >= 0 ? 'font-semibold text-emerald-400 text-sm' : 'font-semibold text-red-400 text-sm'}>
-                                  {diff >= 0 ? '+' : ''}{formatMoney(Math.abs(diff))}
-                                </div>
-                              </div>
-                              <div>
-                                <div className="text-xs text-slate-400">P&L</div>
-                                {renderPnL(pnl)}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       );
