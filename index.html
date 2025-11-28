@@ -527,6 +527,11 @@
       const openQty = openSymbol ? positions[openSymbol].totalQty : 0;
       const avgEntry = openSymbol && openQty > 0 ? positions[openSymbol].totalCost / positions[openSymbol].totalQty : 0;
       
+      // Calculate theoretical average exit price
+      const totalExitQty = exits.reduce((sum, exit) => sum + exit.contracts, 0);
+      const totalExitValue = exits.reduce((sum, exit) => sum + (exit.contracts * exit.exitPrice), 0);
+      const avgExit = totalExitQty > 0 ? totalExitValue / totalExitQty : 0;
+      
       // Theoretical position stats
       const theoOpenSymbol = Object.keys(theoPositions)[0] || '';
       const theoOpenQty = theoOpenSymbol ? theoPositions[theoOpenSymbol].totalQty : 0;
@@ -710,7 +715,7 @@
               </div>
               
               <div className="space-y-2">
-                <div className="grid grid-cols-2 gap-2 bg-slate-800 rounded-lg p-2 border border-slate-700">
+                <div className="grid grid-cols-3 gap-2 bg-slate-800 rounded-lg p-2 border border-slate-700">
                   <div>
                     <div className="text-xs text-slate-400">Open Qty</div>
                     <div className="text-base font-bold text-blue-400">{openQty}</div>
@@ -722,6 +727,15 @@
                     <div className="text-xs text-slate-400">Avg Entry</div>
                     <div className="text-base font-bold text-white">
                       {openQty > 0 ? '$' + formatMoney(avgEntry) : '-'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-400">Theo Avg Exit</div>
+                    <div className="text-base font-bold text-red-400">
+                      {totalExitQty > 0 ? '$' + formatMoney(avgExit) : '-'}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      {totalExitQty > 0 ? totalExitQty + ' contracts' : ''}
                     </div>
                   </div>
                 </div>
@@ -905,6 +919,12 @@
                                       newVals.contracts = e.target.value;
                                       setEditValues(newVals);
                                     }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        saveEntryEdit(entry);
+                                      }
+                                    }}
                                     className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
                                   />
                                 </div>
@@ -918,6 +938,12 @@
                                       const newVals = Object.assign({}, editValues);
                                       newVals.entryPrice = e.target.value;
                                       setEditValues(newVals);
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        saveEntryEdit(entry);
+                                      }
                                     }}
                                     className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
                                   />
@@ -1086,6 +1112,12 @@
                                       newVals.contracts = e.target.value;
                                       setEditValues(newVals);
                                     }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        saveExitEdit(exit);
+                                      }
+                                    }}
                                     className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
                                   />
                                 </div>
@@ -1099,6 +1131,12 @@
                                       const newVals = Object.assign({}, editValues);
                                       newVals.exitPrice = e.target.value;
                                       setEditValues(newVals);
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        saveExitEdit(exit);
+                                      }
                                     }}
                                     className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
                                   />
@@ -1311,6 +1349,12 @@
                                     newVals.contracts = e.target.value;
                                     setEditValues(newVals);
                                   }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      saveTheoEntryEdit(theoEntry);
+                                    }
+                                  }}
                                   className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
                                 />
                               </div>
@@ -1324,6 +1368,12 @@
                                     const newVals = Object.assign({}, editValues);
                                     newVals.entryPrice = e.target.value;
                                     setEditValues(newVals);
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      saveTheoEntryEdit(theoEntry);
+                                    }
                                   }}
                                   className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-white text-sm"
                                 />
