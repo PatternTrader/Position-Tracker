@@ -575,6 +575,11 @@
         ? targetProfit - currentProfit 
         : null;
 
+      // P&L Difference (Theo Potential P&L - Potential P&L)
+      const pnlDifference = (theoPotentialPnL !== null && potentialPnL !== null)
+        ? theoPotentialPnL - potentialPnL
+        : null;
+
       let newAccountBalance = null;
       let targetBalance = null;
       let theoTargetBalance = null;
@@ -706,29 +711,69 @@
               </div>
 
               <div className="bg-slate-800 rounded-lg p-2 mb-2 border border-slate-700 space-y-1.5">
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-slate-400">Balance:</span>
-                  <input
-                    type="text"
-                    value={accountBalance}
-                    onChange={handleAccountBalanceChange}
-                    className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm w-28 text-right"
-                    placeholder="Enter"
-                  />
+                <div className="grid grid-cols-3 gap-2 text-sm">
+                  <div className="flex items-center">
+                    <span className="text-slate-400 w-24">Balance:</span>
+                    <input
+                      type="text"
+                      value={accountBalance}
+                      onChange={handleAccountBalanceChange}
+                      className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm w-28 text-right"
+                      placeholder="Enter"
+                    />
+                  </div>
+                  <div className="flex items-center">
+                    <span className="text-slate-400 w-28">Current Price:</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={currentPrice}
+                      onChange={handleCurrentPriceChange}
+                      className="w-24 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm"
+                      placeholder="Enter"
+                    />
+                  </div>
+                  <div></div>
                 </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-slate-400">Exit P&L:</span>
-                  <span className={totalExitPnL >= 0 ? 'font-bold text-emerald-400' : 'font-bold text-red-400'}>
-                    {totalExitPnL >= 0 ? '+' : '-'}${formatMoneyWhole(Math.abs(totalExitPnL))}
-                  </span>
+                <div className="grid grid-cols-3 gap-2 text-sm">
+                  <div className="flex items-center">
+                    <span className="text-slate-400 w-24">Exit P&L:</span>
+                    <span className={totalExitPnL >= 0 ? 'font-bold text-emerald-400 w-28 text-right' : 'font-bold text-red-400 w-28 text-right'}>
+                      {totalExitPnL >= 0 ? '+' : '-'}${formatMoneyWhole(Math.abs(totalExitPnL))}
+                    </span>
+                  </div>
+                  <div className="flex items-center" title="If all your stop losses are hit, this is your avg. exit price.">
+                    <span className="text-slate-400 cursor-help w-28">Theo Avg Exit:</span>
+                    <span className="font-bold text-red-400">
+                      {totalExitQty > 0 ? '$' + formatMoney(avgExit) : '-'}
+                    </span>
+                    <span className="text-xs text-blue-400 ml-1">
+                      {totalExitQty > 0 ? '(' + totalExitQty + ')' : ''}
+                    </span>
+                  </div>
+                  <div></div>
                 </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-slate-400">New Balance:</span>
-                  {newAccountBalance ? (
-                    <span className="font-bold text-white">${formatMoneyWhole(newAccountBalance)}</span>
-                  ) : (
-                    <span className="font-bold text-slate-500">-</span>
-                  )}
+                <div className="grid grid-cols-3 gap-2 text-sm">
+                  <div className="flex items-center">
+                    <span className="text-slate-400 w-24">New Balance:</span>
+                    {newAccountBalance ? (
+                      <span className="font-bold text-white w-28 text-right">${formatMoneyWhole(newAccountBalance)}</span>
+                    ) : (
+                      <span className="font-bold text-slate-500 w-28 text-right">-</span>
+                    )}
+                  </div>
+                  <div className="flex items-center">
+                    <span className="text-slate-400 w-28">Target Price:</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={targetPrice}
+                      onChange={handleTargetPriceChange}
+                      className="w-24 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm"
+                      placeholder="Enter"
+                    />
+                  </div>
+                  <div></div>
                 </div>
               </div>
               
@@ -736,53 +781,20 @@
                 <div className="grid grid-cols-3 gap-2 bg-slate-800 rounded-lg p-2 border border-slate-700">
                   <div>
                     <div className="text-xs text-slate-400">Open Qty</div>
-                    <div className="text-base font-bold text-blue-400">{openQty}</div>
+                    <div className="text-lg font-bold text-blue-400">{openQty}</div>
                     <div className="text-xs text-slate-500 mt-1">
                       {openSymbol && openSymbol + ' x' + currentMultiplier}
                     </div>
                   </div>
                   <div>
                     <div className="text-xs text-slate-400">Avg Entry</div>
-                    <div className="text-base font-bold text-white">
+                    <div className="text-lg font-bold text-white">
                       {openQty > 0 ? '$' + formatMoney(avgEntry) : '-'}
                     </div>
                   </div>
-                  <div title="If all your stop losses are hit, this is your avg. exit price.">
-                    <div className="text-xs text-slate-400 cursor-help">Theo Avg Exit</div>
-                    <div className="text-base font-bold text-red-400">
-                      {totalExitQty > 0 ? '$' + formatMoney(avgExit) : '-'}
-                    </div>
-                    <div className="text-xs text-slate-500 mt-1">
-                      {totalExitQty > 0 ? totalExitQty + ' contracts' : ''}
-                    </div>
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-2 bg-slate-800 rounded-lg p-2 border border-slate-700">
-                  <div>
-                    <div className="text-xs text-slate-400">Current Price</div>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={currentPrice}
-                      onChange={handleCurrentPriceChange}
-                      className="w-24 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm mt-1"
-                      placeholder="Enter"
-                    />
-                  </div>
-                  <div>
-                    <div className="text-xs text-slate-400">Target Price</div>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={targetPrice}
-                      onChange={handleTargetPriceChange}
-                      className="w-24 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm mt-1"
-                      placeholder="Enter"
-                    />
-                  </div>
                   <div title="If your Target Price is reached, this will be your final Balance.">
                     <div className="text-xs text-slate-400 cursor-help">Target Balance</div>
-                    <div className="text-base font-bold text-amber-400 mt-1">
+                    <div className="text-lg font-bold text-amber-400">
                       {targetBalance !== null ? '$' + formatMoneyWhole(targetBalance) : '-'}
                     </div>
                   </div>
@@ -790,7 +802,7 @@
                 <div className="grid grid-cols-3 gap-2 bg-slate-800 rounded-lg p-2 border border-slate-700">
                   <div>
                     <div className="text-xs text-slate-400">Current P&L</div>
-                    <div className="text-base font-bold">
+                    <div className="text-lg font-bold">
                       {currentProfit !== null ? (
                         <span className={currentProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}>
                           {currentProfit >= 0 ? '+$' : '-$'}{formatMoneyWhole(Math.abs(currentProfit))}
@@ -798,22 +810,22 @@
                       ) : '-'}
                     </div>
                   </div>
-                  <div title="If your Target Price is reached, this is your total P&L.">
-                    <div className="text-xs text-slate-400 cursor-help">Target P&L</div>
-                    <div className="text-base font-bold">
-                      {targetProfit !== null ? (
-                        <span className={targetProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}>
-                          {targetProfit >= 0 ? '+$' : '-$'}{formatMoneyWhole(Math.abs(targetProfit))}
+                  <div title="If your Target Price is reached, this is how much more P&L you can expect to make given the Current Price.">
+                    <div className="text-xs text-slate-400 cursor-help">Potential P&L</div>
+                    <div className="text-lg font-bold">
+                      {potentialPnL !== null ? (
+                        <span className={potentialPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                          {potentialPnL >= 0 ? '+$' : '-$'}{formatMoneyWhole(Math.abs(potentialPnL))}
                         </span>
                       ) : '-'}
                     </div>
                   </div>
-                  <div title="If your Target Price is reached, this is how much more P&L you can expect to make given the Current Price.">
-                    <div className="text-xs text-slate-400 cursor-help">Potential P&L</div>
-                    <div className="text-base font-bold">
-                      {potentialPnL !== null ? (
-                        <span className={potentialPnL >= 0 ? 'text-amber-400' : 'text-red-400'}>
-                          {potentialPnL >= 0 ? '+$' : '-$'}{formatMoneyWhole(Math.abs(potentialPnL))}
+                  <div title="If your Target Price is reached, this is your total P&L.">
+                    <div className="text-xs text-slate-400 cursor-help">Target P&L</div>
+                    <div className="text-lg font-bold">
+                      {targetProfit !== null ? (
+                        <span className="text-amber-400">
+                          {targetProfit >= 0 ? '+$' : '-$'}{formatMoneyWhole(Math.abs(targetProfit))}
                         </span>
                       ) : '-'}
                     </div>
@@ -1215,7 +1227,7 @@
                 {/* Theoretical Position Stats */}
                 <div className="bg-gradient-to-br from-purple-900/50 to-purple-950/50 rounded-lg p-3 border border-purple-700">
                   <h3 className="text-sm font-bold text-purple-300 mb-2">Theoretical Position (Actual + Simulated Entries)</h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
+                  <div className="grid grid-cols-3 gap-3 mb-3">
                     <div>
                       <div className="text-xs text-purple-300">Theo Open Qty</div>
                       <div className="text-lg font-bold text-purple-400">{theoOpenQty}</div>
@@ -1230,6 +1242,14 @@
                       </div>
                     </div>
                     <div>
+                      <div className="text-xs text-purple-300">Theo Target Balance</div>
+                      <div className="text-lg font-bold text-amber-400">
+                        {theoTargetBalance !== null ? '$' + formatMoneyWhole(theoTargetBalance) : '-'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
                       <div className="text-xs text-purple-300">Theo Current P&L</div>
                       <div className="text-lg font-bold">
                         {theoCurrentProfit !== null ? (
@@ -1239,32 +1259,40 @@
                         ) : '-'}
                       </div>
                     </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <div className="text-xs text-purple-300">Theo Target P&L</div>
-                      <div className="text-lg font-bold">
-                        {theoTargetProfit !== null ? (
-                          <span className={theoTargetProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}>
-                            {theoTargetProfit >= 0 ? '+$' : '-$'}{formatMoneyWhole(Math.abs(theoTargetProfit))}
-                          </span>
-                        ) : '-'}
-                      </div>
-                    </div>
                     <div>
                       <div className="text-xs text-purple-300">Theo Potential P&L</div>
                       <div className="text-lg font-bold">
                         {theoPotentialPnL !== null ? (
-                          <span className="text-amber-400">
+                          <span className={theoPotentialPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}>
                             {theoPotentialPnL >= 0 ? '+$' : '-$'}{formatMoneyWhole(Math.abs(theoPotentialPnL))}
+                          </span>
+                        ) : '-'}
+                      </div>
+                      <div className="text-xs text-purple-300 mt-2">P&L Difference</div>
+                      <div className="text-lg font-bold">
+                        {pnlDifference !== null ? (
+                          <span className={pnlDifference >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                            {pnlDifference >= 0 ? '+$' : '-$'}{formatMoneyWhole(Math.abs(pnlDifference))}
                           </span>
                         ) : '-'}
                       </div>
                     </div>
                     <div>
-                      <div className="text-xs text-purple-300">Theo Target Balance</div>
-                      <div className="text-lg font-bold text-amber-400">
-                        {theoTargetBalance !== null ? '$' + formatMoneyWhole(theoTargetBalance) : '-'}
+                      <div className="text-xs text-purple-300">Theo Target P&L</div>
+                      <div className="text-lg font-bold">
+                        {theoTargetProfit !== null ? (
+                          <span className="text-amber-400">
+                            {theoTargetProfit >= 0 ? '+$' : '-$'}{formatMoneyWhole(Math.abs(theoTargetProfit))}
+                          </span>
+                        ) : '-'}
+                      </div>
+                      <div className="text-xs text-purple-300 mt-2">P&L Difference</div>
+                      <div className="text-lg font-bold">
+                        {pnlDifference !== null ? (
+                          <span className={pnlDifference >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                            {pnlDifference >= 0 ? '+$' : '-$'}{formatMoneyWhole(Math.abs(pnlDifference))}
+                          </span>
+                        ) : '-'}
                       </div>
                     </div>
                   </div>
